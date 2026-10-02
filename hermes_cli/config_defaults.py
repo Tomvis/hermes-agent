@@ -1975,6 +1975,9 @@ DEFAULT_CONFIG = {
                 "show_tip", "desktop_project", "close_terminal",
                 "apply_layout", "read_terminal", "read_window_below", "focus_pane",
             ],
+            # Tool names / fnmatch globs that never defer, MCP and plugin tools included (wins
+            # over ``defer``). Each costs its full schema every turn but skips tool_describe.
+            "eager": [],
         },
         # Remote connector discovery/lifecycle through the Nous tool gateway.
         # The flag is the user's off switch; availability additionally requires

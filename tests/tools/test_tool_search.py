@@ -1018,3 +1018,63 @@ class TestDeferredCallSchemaProbe:
         }, calls)
 
         assert validate_deferred_call_args(name, {"payload": {"anything": True}}) is None
+
+
+# ---------------------------------------------------------------------------
+# Eager tools (fork: Tomvis/hermes-agent h5) — named MCP/plugin tools stay visible
+# ---------------------------------------------------------------------------
+
+
+class TestEagerTools:
+    @staticmethod
+    def _register(name, toolset="mcp-eagertest"):
+        from tools.registry import registry
+        registry.register(
+            name=name,
+            handler=lambda args, **kw: json.dumps({"ok": True}),
+            schema=_td(name, "Eager test capability.")["function"],
+            toolset=toolset,
+        )
+
+    def test_eager_parses_names_and_globs_and_defaults_empty(self, caplog):
+        from tools.tool_search import ToolSearchConfig
+        assert ToolSearchConfig.from_raw(None).eager_tools == frozenset()
+        cfg = ToolSearchConfig.from_raw({"eager": ["mcp__ha__*", " GetLiveContext ", ""]})
+        assert cfg.eager_tools == {"mcp__ha__*", "GetLiveContext"}
+        with caplog.at_level("WARNING", logger="tools.tool_search"):
+            assert ToolSearchConfig.from_raw({"eager": "mcp__ha__*"}).eager_tools == frozenset()
+        assert any("tools.tool_search.eager" in r.getMessage() for r in caplog.records)
+
+    def test_eager_mcp_tools_stay_visible_others_still_defer(self):
+        from tools.tool_search import assemble_tool_defs, ToolSearchConfig, BRIDGE_TOOL_NAMES
+        for name in ("mcp__ha__GetLiveContext", "mcp__ha__HassTurnOn", "mcp__other__search"):
+            self._register(name)
+        defs = [_td("terminal", "Run shell"), _td("mcp__ha__GetLiveContext"),
+                _td("mcp__ha__HassTurnOn"), _td("mcp__other__search")]
+        cfg = ToolSearchConfig.from_raw({"enabled": "on", "eager": ["mcp__ha__*"]})
+        result = assemble_tool_defs(defs, context_length=200_000, config=cfg)
+        names = {t["function"]["name"] for t in result.tool_defs}
+        assert result.activated and result.deferred_count == 1
+        assert {"terminal", "mcp__ha__GetLiveContext", "mcp__ha__HassTurnOn"} <= names
+        assert "mcp__other__search" not in names
+        assert set(BRIDGE_TOOL_NAMES) <= names
+
+    def test_eager_beats_explicit_defer_but_never_unlocks_bridge_names(self):
+        from tools.tool_search import is_deferrable_tool_name, BRIDGE_TOOL_NAMES
+        self._register("mcp__ha__HassTurnOff")
+        assert is_deferrable_tool_name("mcp__ha__HassTurnOff")
+        assert not is_deferrable_tool_name(
+            "mcp__ha__HassTurnOff", frozenset({"mcp__ha__HassTurnOff"}), frozenset({"mcp__ha__*"}))
+        for name in BRIDGE_TOOL_NAMES:
+            assert not is_deferrable_tool_name(name, None, frozenset({"*"}))
+
+    def test_bridge_refuses_eager_tool_with_call_directly_error(self, monkeypatch):
+        import tools.tool_search as tool_search
+        self._register("mcp__ha__HassLightSet")
+        cfg = tool_search.ToolSearchConfig.from_raw({"eager": ["mcp__ha__*"]})
+        monkeypatch.setattr(tool_search, "load_config_readonly", lambda: cfg)
+        name, _, err = tool_search.resolve_underlying_call(
+            {"calls": [{"name": "mcp__ha__HassLightSet", "arguments": {}}]})
+        assert name is None and err
+        assert "mcp__ha__HassLightSet" not in tool_search.scoped_deferrable_names(
+            [_td("mcp__ha__HassLightSet")])
