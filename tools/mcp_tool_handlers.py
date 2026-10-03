@@ -532,11 +532,16 @@ def _render_call_tool_result(result, server_name: str) -> str:
         return json.dumps({"result": text_result}, ensure_ascii=False)
 
 
-def _make_tool_handler(server_name: str, tool_name: str, tool_timeout: float):
-    """Sync registry handler (``handler(args_dict, **kwargs) -> str``) calling an MCP tool via the background loop."""
+def _make_tool_handler(server_name: str, tool_name: str, tool_timeout: float,
+                       drop_empty: frozenset = frozenset()):
+    """Sync registry handler (``handler(args_dict, **kwargs) -> str``) calling an MCP tool via the background loop.
+    ``drop_empty``: argument names omitted when blank ("", [], {}, None) — for servers that reject
+    blank optional slots that models fill in anyway (HA intents: "Received invalid slot info")."""
     op = f"tools/call {tool_name}"
 
     def _handler(args: dict, **kwargs) -> str:
+        if drop_empty and isinstance(args, dict):
+            args = {k: v for k, v in args.items() if not (k in drop_empty and (v is None or v in ("", [], {})))}
         # Security boundary: untrusted-server write tools need approval before ANY transport work (incl. lazy spawn).
         error = _trust_gate_check(server_name, tool_name) or _check_circuit_breaker(server_name)
         if error is not None:

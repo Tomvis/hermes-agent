@@ -247,10 +247,17 @@ class _Candidate:
         return self.origin.startswith(_UTILITY_ORIGIN_PREFIX)
 
 
+def _optional_args(tool: Any) -> frozenset:
+    schema = getattr(tool, "inputSchema", None) or {}
+    props, required = schema.get("properties"), schema.get("required")
+    return frozenset(props or ()) - frozenset(required if isinstance(required, list) else ())
+
+
 def _tool_candidates(name: str, tools: Iterable[Any], should_register: Callable[[str], bool],
-                     tool_timeout) -> List[_Candidate]:
+                     tool_timeout, *, drop_empty: bool = False) -> List[_Candidate]:
     """Native tools (live SDK objects or cache stand-ins) -> candidates. The injection scan runs on
-    BOTH paths: the cache file is user-writable JSON."""
+    BOTH paths: the cache file is user-writable JSON. ``drop_empty`` (``mcp_servers.<name>.drop_empty_args``)
+    omits blank optional arguments before ``tools/call``."""
     out: List[_Candidate] = []
     for t in tools:
         if not should_register(t.name):
@@ -258,7 +265,8 @@ def _tool_candidates(name: str, tools: Iterable[Any], should_register: Callable[
             continue
         _schema._scan_mcp_description(name, t.name, t.description or "")
         schema = _schema._convert_mcp_schema(name, t)
-        handler = _handlers._make_tool_handler(name, t.name, tool_timeout)
+        handler = _handlers._make_tool_handler(
+            name, t.name, tool_timeout, _optional_args(t) if drop_empty else frozenset())
         out.append(_Candidate(schema["name"], f"tool {t.name!r}", schema, handler))
     return out
 
@@ -397,7 +405,8 @@ def _register_server_tools(name: str, server: "MCPServerTask", config: dict) -> 
     should_register = _make_tool_filter(name, config)
     key = _server_key_for_task(server)
     _record_tool_trust_metadata(name, config, server._tools, key)
-    candidates = _tool_candidates(name, server._tools, should_register, server.tool_timeout)
+    candidates = _tool_candidates(name, server._tools, should_register, server.tool_timeout,
+                                  drop_empty=_drop_empty(config))
     candidates += _utility_candidates(name, _select_utility_schemas(name, server, config), server.tool_timeout)
     registered = _register_candidates(
         name, _resolve_name_collisions(name, candidates),
@@ -405,6 +414,10 @@ def _register_server_tools(name: str, server: "MCPServerTask", config: dict) -> 
     if registered:
         _write_schema_cache(name, server, config, should_register)
     return registered
+
+
+def _drop_empty(config: dict) -> bool:
+    return _parse_boolish(config.get("drop_empty_args"), default=False)
 
 
 def _server_enabled(config: dict) -> bool:
@@ -500,7 +513,8 @@ def _register_connected_into_current_scope(servers: dict) -> int:
         _record_scope_trust(name, config, scope)
         if registry.get_tool_names_for_toolset(f"mcp-{name}"):
             continue
-        candidates = _tool_candidates(name, server._tools, _make_tool_filter(name, config), server.tool_timeout)
+        candidates = _tool_candidates(name, server._tools, _make_tool_filter(name, config), server.tool_timeout,
+                                      drop_empty=_drop_empty(config))
         candidates += _utility_candidates(
             name, _select_utility_schemas(name, server, config), server.tool_timeout)
         names = _register_candidates(
@@ -526,7 +540,8 @@ def _register_from_cache_sync(name: str, config: dict, entry: dict) -> List[str]
     tool_timeout = _resolve_tool_timeout(config)
     cached_tools = _cached_tools(tools_from_cache_entry(entry))
     _record_tool_trust_metadata(name, config, cached_tools)
-    candidates = _tool_candidates(name, cached_tools, _make_tool_filter(name, config), tool_timeout)
+    candidates = _tool_candidates(name, cached_tools, _make_tool_filter(name, config), tool_timeout,
+                                  drop_empty=_drop_empty(config))
     candidates += _utility_candidates(name, utility_tools_from_cache_entry(entry), tool_timeout)
     registered = _register_candidates(
         name, candidates, check_fn=_make_check_fn(name), scope=_core._mcp_registry_scope, lazy=True)
