@@ -248,7 +248,7 @@ class _Candidate:
 
 
 def _optional_args(tool: Any) -> frozenset:
-    schema = getattr(tool, "inputSchema", None) or {}
+    schema = mcp_field(tool, "input_schema", "inputSchema") or {}
     props, required = schema.get("properties"), schema.get("required")
     return frozenset(props or ()) - frozenset(required if isinstance(required, list) else ())
 
