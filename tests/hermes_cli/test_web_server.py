@@ -3717,6 +3717,24 @@ class TestModelInfoEndpoint:
         assert data["effective_context_length"] == 100000  # override wins
 
 
+    def test_model_info_probes_with_the_configured_api_key(self, monkeypatch):
+        """A keyed custom endpoint (LiteLLM) 401s a keyless probe and logs it as an error."""
+        monkeypatch.setattr(_cfg_mod, "load_config", lambda: {
+            "model": {
+                "default": "hermes-turn",
+                "provider": "custom",
+                "base_url": "http://litellm:4000/v1",
+                "api_key": "sk-test",
+            }
+        })
+
+        with patch("agent.model_metadata.get_model_context_length", return_value=200000) as ctx:
+            self.client.get("/api/model/info")
+
+        assert ctx.call_args.kwargs["api_key"] == "sk-test"
+        assert ctx.call_args.kwargs["config_context_length"] is None
+
+
     def test_model_info_graceful_on_metadata_error(self, monkeypatch):
         """Endpoint should return zeros on import/resolution errors, not 500."""
         import hermes_cli.web_server as ws

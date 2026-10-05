@@ -59,6 +59,7 @@ def get_model_info(profile: Optional[str] = None):
         model_cfg = _load_config_scoped(profile).get("model", "")
         model_name, provider = _main_model_fields(model_cfg)
         base_url = model_cfg.get("base_url", "") if isinstance(model_cfg, dict) else ""
+        api_key = model_cfg.get("api_key", "") if isinstance(model_cfg, dict) else ""
         config_ctx = model_cfg.get("context_length") if isinstance(model_cfg, dict) else None
 
         if not model_name:
@@ -67,8 +68,9 @@ def get_model_info(profile: Optional[str] = None):
         try:
             from agent.model_metadata import get_model_context_length
             # config_context_length=None: ignore the override — we want the auto value
-            auto_ctx = get_model_context_length(model=model_name, base_url=base_url, provider=provider,
-                                                config_context_length=None)
+            # api_key: a keyed endpoint (LiteLLM) 401s the keyless probe waterfall.
+            auto_ctx = get_model_context_length(model=model_name, base_url=base_url, api_key=api_key or "",
+                                                provider=provider, config_context_length=None)
         except Exception:
             auto_ctx = 0
 
