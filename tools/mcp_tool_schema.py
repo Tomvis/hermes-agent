@@ -71,6 +71,9 @@ def _rewrite_local_refs(node):
 _SCHEMA_MAP_KEYS = ("properties", "patternProperties", "$defs", "definitions", "dependentSchemas")
 
 
+from tools.schema_sanitizer import is_free_form_object  # noqa: E402
+
+
 def _repair_object_shape(node):
     """Recursively fill a missing object ``type``, ensure ``properties`` (so ``required``
     can't dangle) and prune ``required`` to names present in ``properties`` (Gemini 400s
@@ -91,7 +94,10 @@ def _repair_object_shape(node):
     if not repaired.get("type") and ("properties" in repaired or "required" in repaired):
         repaired["type"] = "object"
     if repaired.get("type") == "object":
-        if not isinstance(repaired.get("properties"), dict):
+        # h5 (HERMES-23): a free-form map (additionalProperties, no properties) stays open;
+        # an injected ``properties: {}`` makes gpt-5.x emit ``{}`` for it. Top level is
+        # re-filled by _normalize_mcp_input_schema.
+        if not isinstance(repaired.get("properties"), dict) and not is_free_form_object(repaired):
             repaired["properties"] = {}
         # Always a list: a missing/non-list ``required`` reads as ``null`` on strict
         # OpenAI-compatible backends (#56123); ``[]`` is valid everywhere (Gemini included).

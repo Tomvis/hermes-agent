@@ -26,6 +26,17 @@ def _empty_object() -> dict:
     return {"type": "object", "properties": {}, "required": []}
 
 
+def is_free_form_object(node: dict) -> bool:
+    """h5 (HERMES-23): an object schema that is only a map of arbitrary keys (truthy
+    ``additionalProperties``, no ``properties``). Nested ones keep that shape: with an injected
+    ``properties: {}`` gpt-5.x fills them with ``{}``."""
+    return (
+        node.get("type") == "object"
+        and "properties" not in node
+        and bool(node.get("additionalProperties"))
+    )
+
+
 def _rewrite(schema: Any, fn: Callable[[dict], Any]) -> Any:
     """Bottom-up map over a schema tree: lists/dicts recurse, then *fn* sees each dict."""
     if isinstance(schema, list):
@@ -314,12 +325,13 @@ def _sanitize_node(node: Any, path: str) -> Any:
             required = required if isinstance(required, list) else []
             out["required"] = required + [key for key in lifted if key not in required]
     if out.get("type") == "object":
-        if not isinstance(out.get("properties"), dict):
+        if not isinstance(out.get("properties"), dict) and not is_free_form_object(out):
             out["properties"] = {}
         # Always emit a list: ``required: []`` is valid everywhere, while a missing or
         # non-list key reads as ``null`` on strict OpenAI-compatible proxies (#56123).
         required = out.get("required")
-        out["required"] = ([r for r in required if isinstance(r, str) and r in out["properties"]]
+        props = out.get("properties") or {}
+        out["required"] = ([r for r in required if isinstance(r, str) and r in props]
                            if isinstance(required, list) else [])
     return out
 
