@@ -810,8 +810,11 @@ class GatewaySessionCommandsMixin:
         widen = allow_all and self._resume_caller_is_admin(source)
         # Rank by lineage activity, not root started_at: a lineage compressed for days is projected
         # onto its live tip and must sit where the user last touched it (#114271).
+        # h5 (HERMES-29): an admin's --all spans every source, so a chat platform can pick up
+        # API-server (Home Assistant) and Desktop sessions by number.
+        platform = source.platform.value if source.platform else None
         sessions = await self._session_db.list_sessions_rich(
-            source=source.platform.value if source.platform else None,
+            source=None if widen else platform, exclude_sources=["tool"] if widen else None,
             session_key=None if widen else session_key, limit=10, order_by_last_active=True)
         titled = [s for s in sessions if s.get("title")][:10]
         return [s for s in titled if await self._resume_row_visible(source, s, allow_all)]
