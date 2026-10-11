@@ -377,6 +377,22 @@ class TestHandleResumeCommand:
         assert runner.session_store.switch_session.call_args.args[1] == "api-ha"
         db.close()
 
+    def test_resume_tail_shows_recent_texts_without_tool_traffic(self):
+        from gateway.slash_commands_session import GatewaySessionCommandsMixin as mixin
+
+        history = [
+            {"role": "user", "content": "old question"},
+            {"role": "assistant", "content": "old answer"},
+            {"role": "user", "content": "turn on the salon light"},
+            {"role": "assistant", "content": "", "tool_calls": [{"id": "1"}]},
+            {"role": "tool", "content": "{\"ok\": true}"},
+            {"role": "assistant", "content": [{"type": "text", "text": "Done, the light is on."}]},
+        ]
+        tail = mixin._resume_tail(history, turns=2)
+        assert tail == "👤 turn on the salon light\n\n🤖 Done, the light is on."
+        long = mixin._resume_tail([{"role": "assistant", "content": "x" * 900}])
+        assert len(long) == len("🤖 ") + 400 and long.endswith("…")
+
     @pytest.mark.asyncio
     async def test_non_admin_all_stays_on_its_own_platform(self, tmp_path):
         from hermes_state import SessionDB

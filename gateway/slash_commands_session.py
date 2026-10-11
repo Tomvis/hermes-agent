@@ -25,6 +25,7 @@ from gateway.slash_commands_branch_thread import (
     BRANCH_THREAD_PLATFORMS, branch_dest_source, branch_thread_parent, format_thread_ref, parse_branch_args,
 )
 from gateway.slash_commands_status import HISTORY_UNREADABLE
+from hermes_cli.session_recap import _coerce_text
 
 logger = logging.getLogger("gateway.run")  # log-record parity with gateway/run.py
 
@@ -917,9 +918,32 @@ class GatewaySessionCommandsMixin:
                      room=source.chat_name or source.chat_id, msg_part=msg_part)
         if not msg_count:
             return t("gateway.resume.resumed_no_count", title=title)
-        if msg_count == 1:
-            return t("gateway.resume.resumed_one", title=title, count=msg_count)
-        return t("gateway.resume.resumed_many", title=title, count=msg_count)
+        key = "gateway.resume.resumed_one" if msg_count == 1 else "gateway.resume.resumed_many"
+        reply = t(key, title=title, count=msg_count)
+        tail = self._resume_tail(history)
+        return f"{reply}\n\n{tail}" if tail else reply
+
+    @staticmethod
+    def _resume_tail(history: list, turns: int = 6, budget: int = 2500) -> str:
+        """h5 (HERMES-29): the last user/assistant texts, so a chat platform shows what it resumed
+        (it cannot replay the transcript itself). Tool traffic and empty assistant turns skipped."""
+        lines: list[str] = []
+        for message in reversed(history or []):
+            role = message.get("role")
+            if role not in ("user", "assistant"):
+                continue
+            text = " ".join(_coerce_text(message.get("content")).split())
+            if not text:
+                continue
+            limit = 200 if role == "user" else 400
+            text = text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+            line = ("👤 " if role == "user" else "🤖 ") + text
+            if lines and sum(len(x) for x in lines) + len(line) > budget:
+                break
+            lines.append(line)
+            if len(lines) == turns:
+                break
+        return "\n\n".join(reversed(lines))
 
     def _resume_listing_reply(self, source, titled: list[dict], allow_all: bool) -> str:
         """Numbered /resume list; a non-admin ``--all`` falls back to same-origin scoping and says so
