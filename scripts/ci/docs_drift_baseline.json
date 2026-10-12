@@ -123,6 +123,7 @@
   "terminal.degraded_mode",
   "terminal.docker_shm_size",
   "terminal.modal_mode",
+  "tools.tool_search.eager",
   "tts.deepinfra.model",
   "tts.deepinfra.voice",
   "updates.refresh_cua_driver",
