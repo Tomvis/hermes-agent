@@ -259,6 +259,9 @@ piper = [
 modal = ["modal==1.5.5"]
 daytona = ["daytona==0.155.0"]
 vercel = ["vercel==0.7.2"]
+# h5 fork: Hindsight memory is vendored at plugins/memory/hindsight and baked via
+# this extra (Dockerfile build_env), so the sealed venv carries it with lazy installs off.
+hindsight = ["hindsight-client==0.10.3"]
 google-meet = ["playwright==1.62.0", "websockets==15.0.1"]
 messaging = [
   "python-telegram-bot[webhooks]==22.8",
@@ -714,6 +717,7 @@ google-auth-httplib2 = false
 google-auth-oauthlib = false
 google-cloud-pubsub = false
 h2 = false
+hindsight-client = false
 httplib2 = false
 httpx = false
 httpx2 = false

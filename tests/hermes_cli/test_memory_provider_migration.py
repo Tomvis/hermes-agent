@@ -125,7 +125,8 @@ def test_unattended_migration_install_carries_lazy_install_consent(tmp_path, mon
     assert seen.get("assume_deps_consent", False) is consent
 
 
-@pytest.mark.parametrize(("name", "installs"), [("hindsight", True), ("someplugin", False)])
+# h5 fork: hindsight is bundled again (plugins/memory/hindsight), so a still-unbundled one stands in.
+@pytest.mark.parametrize(("name", "installs"), [("honcho", True), ("someplugin", False)])
 def test_startup_recovery_never_asks_a_dependency_question(tmp_path, monkeypatch, name, installs):
     """Agent init cannot answer a prompt: in the CLI the question hangs the turn behind the chat input,
     with no terminal it is refused on every process start. A provider that shipped in core installs
@@ -299,7 +300,7 @@ def test_startup_recovery_backs_off_after_a_failed_install(tmp_path, monkeypatch
     cron run, Desktop restart): one failure, then a quiet hour; `hermes update` still retries."""
     from pm import install as pm_install
 
-    (tmp_path / "config.yaml").write_text("memory:\n  provider: hindsight\n", encoding="utf-8")
+    (tmp_path / "config.yaml").write_text("memory:\n  provider: honcho\n", encoding="utf-8")
     monkeypatch.setenv("HERMES_HOME", str(tmp_path))
     monkeypatch.setattr(mig, "catalog_source", lambda n: n)
     monkeypatch.setattr(pm_install, "lazy_installs_allowed", lambda: True)
@@ -308,10 +309,10 @@ def test_startup_recovery_backs_off_after_a_failed_install(tmp_path, monkeypatch
     said: list[str] = []
     for _process in range(3):
         monkeypatch.setattr(mig, "_attempted", set())  # a fresh process each time
-        assert mig.recover_at_startup("hindsight", say=said.append) is False
-    assert attempts == ["hindsight"]
-    assert "`hermes plugins install hindsight`" in said[-1]  # still told memory is off, and the fix
+        assert mig.recover_at_startup("honcho", say=said.append) is False
+    assert attempts == ["honcho"]
+    assert "`hermes plugins install honcho`" in said[-1]  # still told memory is off, and the fix
     monkeypatch.setattr(mig, "STARTUP_RETRY_SECONDS", 0.0)
     monkeypatch.setattr(mig, "_attempted", set())
-    mig.recover_at_startup("hindsight")
-    assert attempts == ["hindsight", "hindsight"]
+    mig.recover_at_startup("honcho")
+    assert attempts == ["honcho", "honcho"]

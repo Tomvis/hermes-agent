@@ -40,6 +40,7 @@ ANCHORS: dict[str, str | tuple[str, ...]] = {
     "wake-sherpa": "sherpa_onnx",
     "wake-porcupine": "pvporcupine",
     "fal": "fal_client",
+    "hindsight": "hindsight_client",  # h5 fork: baked vendored memory provider
     "messaging": "telegram",
     "telegram": "telegram",
     "discord": "discord",
