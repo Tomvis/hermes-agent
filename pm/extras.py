@@ -41,6 +41,7 @@ ANCHORS: dict[str, str | tuple[str, ...]] = {
     "wake-porcupine": "pvporcupine",
     "fal": "fal_client",
     "hindsight": "hindsight_client",  # h5 fork: baked vendored memory provider
+    "relay": ("segno", "yaml", "websocket"),  # h5 fork: Hermes-Relay plugin deps (HERMES-31)
     "messaging": "telegram",
     "telegram": "telegram",
     "discord": "discord",

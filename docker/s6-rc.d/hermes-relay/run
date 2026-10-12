@@ -1,0 +1,20 @@
+#!/command/with-contenv sh
+# shellcheck shell=sh
+# h5 fork (HERMES-31): Hermes-Relay plugin server. Declared in every image,
+# runs only where HERMES_RELAY is truthy (same down-slot pattern as
+# ../dashboard). Loopback only: the phone reaches it through the dashboard
+# plugin's same-origin ingress (/api/plugins/hermes-relay/transport), so TLS
+# is Traefik's job and the relay itself serves plain HTTP on 127.0.0.1.
+
+case "${HERMES_RELAY:-}" in
+    1|true|TRUE|True|yes|YES|Yes) ;;
+    *) exit 0 ;;
+esac
+
+export HOME=/opt/data
+cd /opt/data
+
+relay_port="${RELAY_PORT:-8767}"
+
+[ "$(id -u)" = 0 ] || exec hermes relay start --host 127.0.0.1 --port "$relay_port" --no-ssl
+exec s6-setuidgid hermes hermes relay start --host 127.0.0.1 --port "$relay_port" --no-ssl

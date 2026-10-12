@@ -262,6 +262,9 @@ vercel = ["vercel==0.7.2"]
 # h5 fork: Hindsight memory is vendored at plugins/memory/hindsight and baked via
 # this extra (Dockerfile build_env), so the sealed venv carries it with lazy installs off.
 hindsight = ["hindsight-client==0.10.3"]
+# h5 fork: deps of the Hermes-Relay plugin (installed in the home, HERMES-31). Hermes never installs
+# plugin deps into the sealed venv, so they ride build_env like [hindsight].
+relay = ["segno==1.6.6", "pyyaml==6.0.3", "websocket-client==1.9.0"]
 google-meet = ["playwright==1.62.0", "websockets==15.0.1"]
 messaging = [
   "python-telegram-bot[webhooks]==22.8",
@@ -756,6 +759,7 @@ python-multipart = false
 python-olm = false
 python-telegram-bot = false
 pyyaml = false
+segno = false
 qrcode = false
 requests = false
 rich = false
@@ -780,6 +784,7 @@ tzdata = false
 unpaddedbase64 = false
 uvicorn = false
 vercel = false
+websocket-client = false
 websockets = false
 youtube-transcript-api = false
 

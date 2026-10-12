@@ -1,0 +1,13 @@
+#!/command/with-contenv sh
+# shellcheck shell=sh
+# Companion to ./run. Disabled: exit 125 so the slot stays down. Enabled:
+# restart, after a 10 s pause when the relay failed (e.g. the plugin is not
+# installed or enabled yet), so a broken setup does not respawn every second.
+
+case "${HERMES_RELAY:-}" in
+    1|true|TRUE|True|yes|YES|Yes) ;;
+    *) exit 125 ;;
+esac
+
+[ "${1:-0}" = 0 ] || sleep 10
+exit 0
