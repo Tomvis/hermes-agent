@@ -15,7 +15,7 @@ logger = logging.getLogger("tools.mcp_tool")
 # Prompt-injection indicators in MCP tool descriptions. WARNING-level only: log but never
 # block, since false positives would break legitimate servers.
 _MCP_INJECTION_PATTERNS = [
-    (re.compile(pattern, re.I), reason)
+    (re.compile(pattern, re.IGNORECASE), reason)
     for pattern, reason in (
         (r"ignore\s+(all\s+)?previous\s+instructions", "prompt override attempt ('ignore previous instructions')"),
         (r"you\s+are\s+now\s+a", "identity override attempt ('you are now a...')"),
@@ -29,7 +29,7 @@ _MCP_INJECTION_PATTERNS = [
         (r"import\s+(subprocess|os|shutil|socket)", "dangerous import reference"))]
 
 
-def _scan_mcp_description(server_name: str, tool_name: str, description: str) -> List[str]:
+def _scan_mcp_description(server_name: str, tool_name: str, description: str) -> list[str]:
     """Scan a tool description for injection patterns; returns finding strings (empty =
     clean) and logs a warning when any match."""
     if not description:
@@ -74,10 +74,21 @@ _SCHEMA_MAP_KEYS = ("properties", "patternProperties", "$defs", "definitions", "
 from tools.schema_sanitizer import is_free_form_object  # noqa: E402
 
 
-def _repair_object_shape(node):
+def _repair_object_shape(node, *, _object_root=False):
     """Recursively fill a missing object ``type``, ensure ``properties`` (so ``required``
     can't dangle) and prune ``required`` to names present in ``properties`` (Gemini 400s
-    otherwise)."""
+    otherwise).
+
+    A dict carrying ``required`` but declaring no ``properties`` and no ``type`` is NOT an
+    object declaration — it is a *constraint fragment*, the JSON Schema idiom for "at least
+    one of these keys must be present" (``allOf``/``oneOf``/``anyOf``/``if`` branches).
+    Synthesising ``properties: {}`` for it prunes every name out of ``required``, so sibling
+    branches collapse into identical always-true schemas; the enclosing ``oneOf`` then has
+    two matches and can never be satisfied, making the tool permanently un-dispatchable while
+    the server-side tool itself is fine. Only the parameters-schema ROOT still gets the
+    dangling-``required`` repair (``_object_root``), because that is the single node handed
+    to providers as the function's argument object.
+    """
     if isinstance(node, list):
         return [_repair_object_shape(item) for item in node]
     if not isinstance(node, dict):
@@ -91,20 +102,22 @@ def _repair_object_shape(node):
             repaired[key] = {name: _repair_object_shape(schema) for name, schema in value.items()}
         else:
             repaired[key] = _repair_object_shape(value)
-    if not repaired.get("type") and ("properties" in repaired or "required" in repaired):
-        repaired["type"] = "object"
-    if repaired.get("type") == "object":
-        # h5 (HERMES-23): a free-form map (additionalProperties, no properties) stays open;
-        # an injected ``properties: {}`` makes gpt-5.x emit ``{}`` for it. Top level is
-        # re-filled by _normalize_mcp_input_schema.
-        if not isinstance(repaired.get("properties"), dict) and not is_free_form_object(repaired):
-            repaired["properties"] = {}
-        # Always a list: a missing/non-list ``required`` reads as ``null`` on strict
-        # OpenAI-compatible backends (#56123); ``[]`` is valid everywhere (Gemini included).
-        required = repaired.get("required")
-        props = repaired.get("properties") or {}
-        repaired["required"] = ([r for r in required if isinstance(r, str) and r in props]
-                                if isinstance(required, list) else [])
+    # Constraint fragments are returned untouched: repairing them is what destroys them.
+    if _object_root or "properties" in repaired or "type" in node:
+        if not repaired.get("type") and ("properties" in repaired or "required" in repaired):
+            repaired["type"] = "object"
+        if repaired.get("type") == "object":
+            # h5 (HERMES-23): a free-form map (additionalProperties, no properties) stays open;
+            # an injected ``properties: {}`` makes gpt-5.x emit ``{}`` for it. Top level is
+            # re-filled by _normalize_mcp_input_schema.
+            if not isinstance(repaired.get("properties"), dict) and not is_free_form_object(repaired):
+                repaired["properties"] = {}
+            # Always a list: a missing/non-list ``required`` reads as ``null`` on strict
+            # OpenAI-compatible backends (#56123); ``[]`` is valid everywhere (Gemini included).
+            required = repaired.get("required")
+            props = repaired.get("properties") or {}
+            repaired["required"] = ([r for r in required if isinstance(r, str) and r in props]
+                                    if isinstance(required, list) else [])
     return repaired
 
 
@@ -129,7 +142,7 @@ def _normalize_mcp_input_schema(schema: dict | None) -> dict:
     normalized = _rewrite_local_refs(schema)
     normalized = strip_nullable_unions(normalized, keep_nullable_hint=True)
     normalized = collapse_const_unions(normalized)
-    normalized = _repair_object_shape(normalized)
+    normalized = _repair_object_shape(normalized, _object_root=True)
     if not isinstance(normalized, dict):
         return dict(_EMPTY_OBJECT_SCHEMA)
     if normalized.get("type") == "object" and "properties" not in normalized:
@@ -205,7 +218,7 @@ _UTILITY_TOOL_SPECS = (
      }, ["name"]))
 
 
-def _build_utility_schemas(server_name: str) -> List[dict]:
+def _build_utility_schemas(server_name: str) -> list[dict]:
     """Schemas for the resource/prompt utility tools as ``{schema, handler_key}`` dicts."""
     out = []
     for handler_key, description, properties, required in _UTILITY_TOOL_SPECS:
