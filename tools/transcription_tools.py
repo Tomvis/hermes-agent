@@ -22,6 +22,7 @@ from tempfile import TemporaryDirectory
 from typing import Optional, Dict, Any
 
 from utils import is_truthy_value
+from agent.home_language import stt_language_default
 from tools.transcription_common import (
     BUILTIN_STT_PROVIDERS, CLOUD_STT_PROVIDERS, DEFAULT_ELEVENLABS_STT_MODEL,
     DEFAULT_GROQ_STT_MODEL, DEFAULT_LOCAL_MODEL, DEFAULT_MISTRAL_STT_MODEL, DEFAULT_PROVIDER,
@@ -109,7 +110,7 @@ def _resolve_stt_language(
     provider_cfg = _get_stt_section(stt_config, provider_key)
     candidates = [provider_cfg.get(key) for key in ("language", *extra_keys)]
     if isinstance(stt_config, dict):
-        candidates.append(stt_config.get("language"))
+        candidates.append(stt_language_default(stt_config.get("language")))  # h5 HW-201: home language
     candidates.append(os.getenv(LOCAL_STT_LANGUAGE_ENV))
     return next((c.strip() for c in candidates if isinstance(c, str) and c.strip()), None)
 
