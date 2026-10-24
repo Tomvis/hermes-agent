@@ -1,5 +1,6 @@
 import { applyDocumentLocale, LOCALE_ENDONYMS } from "@hermes/shared/i18n";
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
+import { api } from "@/lib/api";
 import type { Locale, Translations } from "./types";
 import { en } from "./en";
 import { zh } from "./zh";
@@ -78,7 +79,7 @@ const I18nContext = createContext<I18nContextValue>({
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(getInitialLocale);
 
-  const setLocale = useCallback((l: Locale) => {
+  const remember = useCallback((l: Locale) => {
     setLocaleState(l);
     try {
       localStorage.setItem(STORAGE_KEY, l);
@@ -86,6 +87,31 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       // ignore
     }
   }, []);
+
+  // Fork (HW-190): display.language in config.yaml is the source of truth;
+  // localStorage only paints the first frame.
+  useEffect(() => {
+    void api
+      .getConfig()
+      .then((cfg) => {
+        const display = (cfg?.display as Record<string, unknown> | undefined) ?? {};
+        const language = typeof display.language === "string" ? display.language : "";
+        if (isLocale(language)) remember(language);
+      })
+      .catch(() => {
+        // offline or signed out: the cached locale stays
+      });
+  }, [remember]);
+
+  const setLocale = useCallback(
+    (l: Locale) => {
+      remember(l);
+      void api.saveDisplayLanguage(l).catch(() => {
+        // the pick still shows here; the next load re-reads the server
+      });
+    },
+    [remember],
+  );
 
   useEffect(() => {
     applyDocumentLocale(locale);

@@ -664,6 +664,18 @@ export const api = {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ config }),
     }),
+  // Fork (HW-190): the dashboard's language lives in display.language, so the household's home
+  // language (pushed there by theme_sync) and a pick made here are one value. preserve_language
+  // keeps an explicit "en" from being stripped as a default.
+  saveDisplayLanguage: (language: string, profile = getManagementProfile()) =>
+    fetchJSON<{ ok: boolean }>(
+      appendQueryParam(appendProfileParam("/api/config", profile), "preserve_language", "true"),
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ config: { display: { language } } }),
+      },
+    ),
   getConfigRaw: (profile = getManagementProfile()) =>
     fetchJSON<{ yaml: string; path?: string }>(
       appendProfileParam("/api/config/raw", profile),
