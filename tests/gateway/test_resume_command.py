@@ -303,28 +303,33 @@ class TestHandleResumeCommand:
         db.close()
 
     @pytest.mark.asyncio
-    async def test_admin_all_lists_and_resumes_other_sources(self, tmp_path):
+    async def test_admin_sessions_all_then_resume_id_all_reaches_other_sources(self, tmp_path):
+        """HW-283: upstream covers the old h5 HERMES-29 patch. `/sessions all` lists every
+        source for an admin, and `/resume <id> --all` switches to it; a bare id stays blocked."""
         from hermes_state import SessionDB
 
         db = SessionDB(db_path=tmp_path / "state.db")
         db.create_session("api-ha", "api_server")
         db.append_message("api-ha", "user", "lights")
         db.set_session_title("api-ha", "Home Assistant Chat")
-        db.create_session("tool-run", "tool")
-        db.set_session_title("tool-run", "Tool Run")
 
-        listing = _make_event(text="/resume --all")
+        listing = _make_event(text="/sessions all")
         runner = _make_runner(session_db=db, event=listing)
         runner._resume_caller_is_admin = lambda _source: True
-        result = await runner._handle_resume_command(listing)
-        assert "Home Assistant Chat" in result
-        assert "Tool Run" not in result
+        result = await runner._handle_sessions_command(listing)
+        assert "Home Assistant Chat" in result and "api-ha" in result
 
-        pick = _make_event(text="/resume 1 --all")
+        bare = _make_event(text="/resume api-ha")
+        runner = _make_runner(session_db=db, event=bare)
+        runner._resume_caller_is_admin = lambda _source: True
+        result = await runner._handle_resume_command(bare)
+        runner.session_store.switch_session.assert_not_called()
+
+        pick = _make_event(text="/resume api-ha --all")
         runner = _make_runner(session_db=db, event=pick)
         runner._resume_caller_is_admin = lambda _source: True
         result = await runner._handle_resume_command(pick)
-        assert "Home Assistant Chat" in result and "blocked" not in result
+        assert "Home Assistant Chat" in result
         assert runner.session_store.switch_session.call_args.args[1] == "api-ha"
         db.close()
 
@@ -343,20 +348,6 @@ class TestHandleResumeCommand:
         assert tail == "👤 turn on the salon light\n\n🤖 Done, the light is on."
         long = mixin._resume_tail([{"role": "assistant", "content": "x" * 900}])
         assert len(long) == len("🤖 ") + 400 and long.endswith("…")
-
-    @pytest.mark.asyncio
-    async def test_non_admin_all_stays_on_its_own_platform(self, tmp_path):
-        from hermes_state import SessionDB
-
-        db = SessionDB(db_path=tmp_path / "state.db")
-        db.create_session("api-ha", "api_server")
-        db.set_session_title("api-ha", "Home Assistant Chat")
-        event = _make_event(text="/resume --all")
-        runner = _make_runner(session_db=db, event=event)
-        runner._resume_caller_is_admin = lambda _source: False
-        result = await runner._handle_resume_command(event)
-        assert "Home Assistant Chat" not in result
-        db.close()
 
     @pytest.mark.asyncio
     async def test_numeric_resume_fallback_uses_exact_lane_candidates(self, tmp_path):
