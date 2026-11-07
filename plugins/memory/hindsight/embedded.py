@@ -74,7 +74,12 @@ class LocalRuntimeStatus:
     reason: str | None = None
 
 
-def _check_local_runtime() -> LocalRuntimeStatus:
+# What every mode imports in this process; local_embedded also needs the daemon manager.
+_CLIENT_MODULES = ("hindsight_client",)
+_LOCAL_RUNTIME_MODULES = (*_CLIENT_MODULES, "hindsight_embed.daemon_embed_manager")
+
+
+def _check_local_runtime(modules: tuple[str, ...] = _LOCAL_RUNTIME_MODULES) -> LocalRuntimeStatus:
     """Whether what local_embedded needs IN THIS PROCESS imports cleanly: an HTTP client and
     the daemon manager. Nothing else belongs here.
 
@@ -88,7 +93,7 @@ def _check_local_runtime() -> LocalRuntimeStatus:
     are declared in this plugin's pyproject and conflict with nothing.
     """
     try:
-        for module in ("hindsight_client", "hindsight_embed.daemon_embed_manager"):
+        for module in modules:
             importlib.import_module(module)
         return LocalRuntimeStatus(available=True)
     except Exception as exc:
@@ -107,7 +112,8 @@ def _local_runtime_hint(reason: str | None) -> str:
     if "no module named" in text and any(m in text for m in ("hindsight_client", "hindsight_embed")):
         return (
             " The plugin's own packages (hindsight-client, hindsight-embed) are missing from "
-            "this environment: run 'hermes pm repair' and restart Hermes to rebuild them. The Hindsight server itself is NOT needed here — it runs as a "
+            "this environment: run 'hermes pm repair', then 'hermes gateway restart' (restarting the app alone keeps "
+            "a running gateway on the old environment). The Hindsight server itself is NOT needed here — it runs as a "
             "separate process."
         )
     return ""
@@ -157,9 +163,13 @@ def _managed_uvx_dir(path: str) -> str | None:
     PATH (#5192). Only the helper's env gets it; the parent's PATH is left alone."""
     if shutil.which("uvx", path=path):
         return None
-    for candidate in sorted((Path.home() / ".hermes" / "tools").glob("uv-*"), reverse=True):
-        if shutil.which("uvx", path=str(candidate)):
-            return str(candidate)
+    # The Docker image keeps its uv under the install root instead (/opt/hermes/tools, next to the
+    # /opt/hermes/.venv this interpreter runs from) while HOME is /opt/data (#5580). Hermes' own
+    # pm.install.uv_launcher would name it directly, but the plugin must not import pm.
+    for tools in (Path.home() / ".hermes" / "tools", Path(sys.prefix).parent / "tools"):
+        for candidate in sorted(tools.glob("uv-*"), reverse=True):
+            if shutil.which("uvx", path=str(candidate)):
+                return str(candidate)
     return None
 
 
@@ -352,6 +362,7 @@ _PLUGIN_PROFILE_ENV_KEYS = frozenset(
         "HINDSIGHT_API_LOG_LEVEL",
         "HINDSIGHT_API_LLM_BASE_URL",
         "HINDSIGHT_EMBED_DAEMON_IDLE_TIMEOUT",
+        "HINDSIGHT_EMBED_API_DATABASE_URL",
     }
 )
 
@@ -370,7 +381,10 @@ def _build_embedded_profile_env(config: dict[str, Any], *, llm_api_key: str | No
         llm_api_key = _embedded_llm_api_key(config)
     env_values = {
         "HINDSIGHT_API_LLM_PROVIDER": str(_daemon_llm_provider(config.get("llm_provider", ""))),
-        "HINDSIGHT_API_LLM_API_KEY": str(llm_api_key or ""),
+        # A keyless local OpenAI-style server still runs as "openai", which the server refuses without a key (#5603).
+        "HINDSIGHT_API_LLM_API_KEY": str(
+            llm_api_key or ("not-needed" if config.get("llm_provider") == "openai_compatible" else "")
+        ),
         "HINDSIGHT_API_LLM_MODEL": str(config.get("llm_model", "")),
         "HINDSIGHT_API_LOG_LEVEL": "info",
     }
@@ -388,7 +402,28 @@ def _build_embedded_profile_env(config: dict[str, Any], *, llm_api_key: str | No
         idle_timeout = os.environ.get("HINDSIGHT_IDLE_TIMEOUT")
     if idle_timeout is not None and idle_timeout != "":
         env_values["HINDSIGHT_EMBED_DAEMON_IDLE_TIMEOUT"] = str(_parse_int_setting(idle_timeout, _DEFAULT_IDLE_TIMEOUT))
+    if database_url := _embedded_database_url(config):
+        env_values["HINDSIGHT_EMBED_API_DATABASE_URL"] = database_url
     return env_values
+
+
+# Either name says where the daemon's database is; hindsight-embed before 1.2 honours only the first.
+_DATABASE_URL_KEYS = ("HINDSIGHT_EMBED_API_DATABASE_URL", "HINDSIGHT_API_DATABASE_URL")
+
+
+def _embedded_database_url(config: dict[str, Any]) -> str:
+    """The database the user pointed Hindsight at, from a scoped secret, else the profile env itself
+    (a URL set there by hand must survive a rewrite). Without it the daemon owns a pg0 of its own,
+    and starting that against a cluster that outlived the last daemon fails with "Instance already
+    running" on every restart (#6093). The process environment the daemon inherits anyway."""
+    for key in _DATABASE_URL_KEYS:
+        try:
+            if url := get_secret(key, ""):
+                return str(url)
+        except UnscopedSecretError:
+            pass
+    on_disk = _load_simple_env(_embedded_profile_env_path(config))
+    return next((url for key in _DATABASE_URL_KEYS if (url := on_disk.get(key))), "")
 
 
 def _secure_write_profile_env(profile_env: Path, content: str) -> None:
