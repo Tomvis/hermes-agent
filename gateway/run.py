@@ -1385,7 +1385,8 @@ def _last_transcript_timestamp(history: Optional[list[dict[str, Any]]]) -> Any:
 
 
 # Tool output may hold literal MEDIA: examples (docs, logs); only deliberate media producers may auto-append.
-_AUTO_APPEND_MEDIA_TOOL_NAMES = {"text_to_speech", "text_to_speech_tool", "image_generate"}
+_AUTO_APPEND_MEDIA_TOOL_NAMES = {"text_to_speech", "text_to_speech_tool", "image_generate",
+                                 "render_mermaid"}  # h5 (HERMES-54)
 
 # Replay-history canonicalization lives in agent/replay_cleanup.py so every resume
 # surface and the send path share one implementation.

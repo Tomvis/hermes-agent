@@ -121,6 +121,8 @@ TOOLSETS = {
         "search (content + files)",
         ["read_file", "write_file", "patch", "search_files"],
     ),
+    # h5 (HERMES-54): opt-in only (in no platform bundle); Desktop renders ```mermaid itself.
+    "diagram": _ts("Render Mermaid diagrams to PNG images for chats that cannot display Mermaid", ["render_mermaid"]),
     "tts": _ts("Text-to-speech: convert text to audio with Edge TTS (free), ElevenLabs, OpenAI, or xAI", ["text_to_speech"]),
     "todo": _ts("Task planning and tracking for multi-step work", ["todo_list"]),
     "memory": _ts("Persistent memory across sessions (personal notes + user profile)", ["memory"]),
