@@ -92,6 +92,8 @@ def test_renders_png_and_returns_media_tag(kroki):
     ((req_path, headers, body),) = kroki.requests
     assert req_path == "/mermaid/png"
     assert headers["Content-Type"].startswith("text/plain")
+    # Kroki sends a syntax error as a text body only when text/plain comes first in Accept.
+    assert headers["Accept"].startswith("text/plain")
     assert body == "graph TD\n  A --> B"
 
 
@@ -135,6 +137,15 @@ def test_kroki_error_is_returned_so_the_model_can_fix_the_syntax(kroki):
 
     assert "error" in out and "Parse error on line 2" in out["error"]
     assert not _diagram_dir().exists() or not any(_diagram_dir().iterdir())
+
+
+def test_an_error_image_body_never_reaches_the_model(kroki):
+    kroki.status, kroki.body = 400, PNG
+
+    out = _render(source="graph TD\n  A -->")
+
+    assert "error" in out and "HTTP 400" in out["error"]
+    assert "PNG" not in out["error"] and "\ufffd" not in out["error"]
 
 
 def test_oversized_png_is_refused_and_not_written(kroki, monkeypatch):

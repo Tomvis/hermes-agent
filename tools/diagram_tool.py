@@ -76,7 +76,8 @@ def render_mermaid(source: Any, title: Any = None) -> str:
         with httpx.Client(timeout=TIMEOUT_S, follow_redirects=False, trust_env=False) as client:
             with client.stream(
                 "POST", f"{base}/mermaid/png", content=text.encode("utf-8"),
-                headers={"Content-Type": "text/plain; charset=utf-8", "Accept": "image/png",
+                # text/plain first: Kroki then sends a syntax error as text, not as an error image.
+                headers={"Content-Type": "text/plain; charset=utf-8", "Accept": "text/plain, image/png",
                          "User-Agent": _USER_AGENT},
             ) as response:
                 body = bytearray()
@@ -91,7 +92,8 @@ def render_mermaid(source: Any, title: Any = None) -> str:
         return tool_error(f"The diagram renderer is unreachable: {type(exc).__name__}")
 
     if status != 200:
-        detail = bytes(body).decode("utf-8", "replace").strip()[:_MAX_ERROR_CHARS]
+        raw = bytes(body)
+        detail = "" if raw.startswith(PNG_MAGIC) else raw.decode("utf-8", "replace").strip()[:_MAX_ERROR_CHARS]
         return tool_error(f"Rendering failed (HTTP {status}): {detail or 'no detail'}. "
                           "Fix the Mermaid syntax and try again.")
     if not bytes(body).startswith(PNG_MAGIC):
