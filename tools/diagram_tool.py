@@ -111,8 +111,8 @@ def render_mermaid(source: Any, title: Any = None) -> str:
 RENDER_MERMAID_SCHEMA = {
     "name": "render_mermaid",
     "description": (
-        "Render a Mermaid diagram (flowchart, sequence, class, state, ER, gantt, pie, mindmap, "
-        "timeline...) to a PNG image that is attached to your reply. Use it whenever a diagram would "
+        "Render a Mermaid diagram to a PNG image attached to your reply. Any Mermaid type works "
+        "(flowchart, sequence, class, state, ER, gantt, pie, mindmap, timeline). Use it whenever a diagram would "
         "help and this chat cannot display Mermaid code blocks itself (Telegram and other messaging "
         "apps): pass the Mermaid source here instead of writing a ```mermaid block. On an error "
         "(usually Mermaid syntax), fix the source and call it again."
