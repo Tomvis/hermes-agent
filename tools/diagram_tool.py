@@ -114,8 +114,9 @@ RENDER_MERMAID_SCHEMA = {
         "Render a Mermaid diagram to a PNG image attached to your reply. Any Mermaid type works "
         "(flowchart, sequence, class, state, ER, gantt, pie, mindmap, timeline). Use it whenever a diagram would "
         "help and this chat cannot display Mermaid code blocks itself (Telegram and other messaging "
-        "apps): pass the Mermaid source here instead of writing a ```mermaid block. On an error "
-        "(usually Mermaid syntax), fix the source and call it again."
+        "apps): pass the Mermaid source here instead of writing a ```mermaid block. Wrap node and edge "
+        "text in double quotes when it has ( ) [ ] { } : ; # or other punctuation: A[\"Hermes (tom)\"], "
+        "not A[Hermes (tom)]. On an error (usually Mermaid syntax), fix the source and call it again."
     ),
     "parameters": {
         "type": "object",

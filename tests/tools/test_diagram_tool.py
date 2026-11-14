@@ -218,6 +218,13 @@ def test_schema_takes_only_source_and_title():
     assert "Mermaid" in RENDER_MERMAID_SCHEMA["description"]
 
 
+def test_schema_tells_the_model_to_quote_punctuated_labels():
+    # 11-07: A[Hermes (tom)] cost a failed render before the model quoted it.
+    from tools.diagram_tool import RENDER_MERMAID_SCHEMA
+
+    assert 'A["Hermes (tom)"]' in RENDER_MERMAID_SCHEMA["description"]
+
+
 def test_diagram_toolset_is_opt_in_only():
     from toolsets import _HERMES_CORE_TOOLS, resolve_toolset
 
